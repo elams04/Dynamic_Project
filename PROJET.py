@@ -64,7 +64,7 @@ y_t=0.47+0.1*sp.sqrt(2)*sp.sin(sp.pi*(t-1))*sp.cos(sp.pi*(t-1))/(1+sp.cos(sp.pi*
 q=sp.Matrix(12,1,[xa,xb,yb,xd,yd,xf,yf,xh,yh,phic,phie,phig])
 q_dot=q.diff(t)
 g=sp.Matrix([xa+w/2 -xb,
-             xb+l2*sp.cos(phie)-xd,
+             xb+l2*sp.cos(phic)-xd,
             yb-h,yb+l2*sp.sin(phic)-yd,
             xd+l3*sp.cos(phie)-xf,
             yd+l3*sp.sin(phie)-yf,
