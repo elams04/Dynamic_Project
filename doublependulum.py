@@ -14,12 +14,11 @@ par = {
 }
 
 # Defining mass matrix
-epsilon = 1e-4
-M = np.diag([par['mass1'],par['mass1'],0,par['mass2'],par['mass2'],0]) + np.eye(6) * epsilon
+M = np.diag([par['mass1'],par['mass1'],0,par['mass2'],par['mass2'],0])
 
 # Defining stiffness matrix
-#K = np.diag([0,0,0,0,0,0])
-K = np.diag([1e-3, 1e-3, 1e-3, 1e-3, 1e-3, 1e-3])
+K = np.diag([0,0,0,0,0,0])
+#K = np.diag([1e-3, 1e-3, 1e-3, 1e-3, 1e-3, 1e-3])
 # Defining force vector
 f_ext = np.array([0, -par['mass1']*par['gravity'], 0, 0, -par['mass2']*par['gravity'],0])
 
@@ -30,7 +29,7 @@ gamma = 0.5 + alpha
 beta = 0.25 * (gamma + 1/2)**2
 tolQ = 1e-9
 m = 4 # Number of constraints
-k = 100000 # Constraint scaling factor
+k = 1# Constraint scaling factor
 maxiter = 1002
 
 t_0 = 0
@@ -65,9 +64,9 @@ def res(qt,qt_d, qt_dd, lt):
     
     gv = np.zeros(4)
     gv[0] = qt[0] - par['length1']*math.sin(qt[2])
-    gv[1] = qt[1] - par['length1']*math.cos(qt[2])
+    gv[1] = qt[1] + par['length1']*math.cos(qt[2])
     gv[2] = qt[3] - qt[0] - par['length2']*math.sin(qt[5])
-    gv[3] = qt[4] - qt[1] - par['length2']*math.cos(qt[5])
+    gv[3] = qt[4] - qt[1] + par['length2']*math.cos(qt[5])
 
     resc = np.concatenate([r,gv])
     return resc 
@@ -104,8 +103,8 @@ for i in range(len(t)-1):
     while np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],lt[j])) > tolQ:
         
         # Defining matrix S_t 
-        first_block = 1/(beta*h**2)*M + K.T
-        second_block = k*G(qt[j]).T
+        first_block = 1/(beta*h**2)*M 
+        second_block =  G(qt[j]).T
         top_row = np.hstack((first_block, second_block))  
         bottom_row = np.hstack((second_block.T, np.zeros((4,4))))   
 
@@ -114,7 +113,8 @@ for i in range(len(t)-1):
         print(np.linalg.cond(S_t))
 
         # Solve the linear system for Dql
-        Dql = np.linalg.solve(S_t, -res(qt[j],qt_d[j],qt_dd[j],lt[j])) 
+        #Dql = np.linalg.solve(S_t, -res(qt[j],qt_d[j],qt_dd[j],lt[j])) 
+        Dql= np.linalg.inv(S_t) @ -res(qt[j],qt_d[j],qt_dd[j],lt[j])
 
         # Update variables
         qt[j+1] = qt[j] + Dql[:6]
@@ -122,7 +122,7 @@ for i in range(len(t)-1):
         qt_dd[j+1] = qt_dd[j] + 1/(beta*h**2)*Dql[:6]
         lt[j+1] = lt[j] + Dql[6:]
 
-        print(Dql)
+      
 
         if j == maxiter-2:
             print('Differential corrector did not converged')
@@ -131,26 +131,7 @@ for i in range(len(t)-1):
         
         j += 1
 
-    print("Condition number of M:", np.linalg.cond(M))
-    print(res(qt[j],qt_d[j],qt_dd[j],lt[j]))
-    plt.figure()
-    plt.plot(qt_dd[:,0])
-    plt.plot(qt_dd[:,1])
-    plt.plot(qt_dd[:,2])
-    plt.plot(qt_dd[:,3])
-    plt.plot(qt_dd[:,4])
-    plt.plot(qt_dd[:,5])
 
-    
-
-
-    plt.figure()
-    plt.plot(lt[:,0])
-    plt.plot(lt[:,1])
-    plt.plot(lt[:,2])
-    plt.plot(lt[:,3])
-    plt.xlabel('Iteration')
-    plt.show()
 
     q[i+1] = qt[j]
     q_d[i+1] = qt_d[j]
@@ -172,8 +153,4 @@ plt.title('Double Pendulum Motion')
 plt.legend()
 plt.grid()
 plt.show()
-
-
-
-
 
