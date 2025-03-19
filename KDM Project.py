@@ -11,7 +11,7 @@ import math
 t=sp.Symbol('t') #time 
 
 #Parameters of problem
-j2,j3,j4,w,h,l2,l3,l4,m1,m2,m3,m4,hl,l,gravity,mu=sp.symbols('j2 j3 j4 w h l2 l3 l4 m1 m2 m3 m4 hl l ga mu')
+j2,j3,j4,w,h,l2,l3,l4,m1,m2,m3,m4,hl,l,f_n,gravity,mu=sp.symbols('j2 j3 j4 w h l2 l3 l4 m1 m2 m3 m4 hl l f_n ga mu')
 
 #Coordinates 
 xa=sp.Function('x_a')(t)
@@ -62,11 +62,12 @@ sq_d = sq_d.subs({sq[i].diff(t): sq_dot_symbols[i] for i in range(sq.shape[0])})
 # Constriants definition
 sg=sp.Matrix([xa+w/2 -xb,
              xb+l2*sp.cos(phic)-xd,
-            yb-hl,yb+l2*sp.sin(phic)-yd,
+            yb-hl,
+            yb+l2*sp.sin(phic)-yd,
             xd+l3*sp.cos(phie)-xf,
             yd+l3*sp.sin(phie)-yf,
             xf+l4*sp.cos(phig)-xh,
-            yf-l4*sp.sin(phig)-yh,
+            yf+l4*sp.sin(phig)-yh,
             x_t-xh,
             y_t-yh])
 sG=sg.jacobian(sq)
@@ -81,7 +82,7 @@ sM[6,11]=m4*l4*sp.cos(phig)
 
 
 # F_ext vector definition
-sf_ext=sp.Matrix(12,1,[-sp.tanh(10*xa_dot)*mu*(m1+m2+m3+m4)*gravity,
+sf_ext=sp.Matrix(12,1,[-sp.tanh(10*xa_dot)*mu*np.abs(f_n),
                       0,
                       -(m1+m2)*gravity,
                       0,
@@ -141,8 +142,8 @@ alpha = 0.015
 gamma = 0.5 + alpha
 beta = 0.25 * (gamma + 1/2)**2
 tolQ = 1e-9
-k = 1# Constraint scaling factor
-maxiter = 102
+kscal = 10000
+maxiter = 502
 
 t_0 = 0
 t_f = 2
@@ -304,10 +305,11 @@ def Ct(q_d):
 
     return np.array(Ct).astype(np.float64)
 
-def f_ext(q,q_d):
+def f_ext(q,q_d,l):
     # Define the numerical values for q
     q_values = {
         xa_dot: q_d[0],
+        f_n: l[1],
         phic: q[9],   # phic
         phie: q[10],  # phie
         phig: q[11],  # phig
@@ -339,7 +341,7 @@ def f_ext(q,q_d):
 def res(q,q_d, q_dd, l,tt):
 
     # Evaluate the equation of motion residuals
-    r = M(q) @ q_dd + G(q).T @ l - K @ (q-q_0) - f_ext(q,q_d).T
+    r = M(q) @ q_dd + G(q).T @ l - K @ (q-q_0) - f_ext(q,q_d,l).T
     
     # Evaluate the constraint residuals
     q_values = {
@@ -404,16 +406,17 @@ for i in range(len(tt)-1):
     qt_dd[0] = q_dd[i+1]
     lt[0] = l[i+1] 
 
-    while np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],lt[j],tt[i])) > tolQ:
+    while np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],kscal*lt[j],tt[i])) > tolQ:
 
         # Defining matrix S_t 
         first_block = 1/(beta*h**2)*M(qt[j]) - gamma/(beta*h)*Ct(qt_d[j]) + Kt(qt[j],qt_dd[j],lt[j])
-        second_block =  G(qt[j]).T
+        second_block =  kscal*G(qt[j]).T
         top_row = np.hstack((first_block, second_block))  
         bottom_row = np.hstack((second_block.T, np.zeros((m,m))))   
 
         # Final matrix: concatenate top and bottom rows
         S_t = np.vstack((top_row, bottom_row))  
+        print('s_t cond',np.linalg.cond(S_t))
 
         # Solve the linear system for Dql
         #Dql = np.linalg.solve(S_t, -res(qt[j],qt_d[j],qt_dd[j],lt[j])) 
@@ -423,7 +426,7 @@ for i in range(len(tt)-1):
         qt[j+1] = qt[j] + Dql[:n].T
         qt_d[j+1] = qt_d[j] + gamma/(beta*h)*Dql[:n].T
         qt_dd[j+1] = qt_dd[j] + 1/(beta*h**2)*Dql[:n].T
-        lt[j+1] = lt[j] + Dql[n:].T
+        lt[j+1] = lt[j] + kscal*Dql[n:].T
 
         print('Iteration:',j," Residual:",np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],lt[j],tt[i])))
         
