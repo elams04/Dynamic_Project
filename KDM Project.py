@@ -253,7 +253,7 @@ def Kt(q,q_dd,l):
     sub = {**q_values, **param_values}
 
     # Evaluate the matrix numerically
-    Kt =  dGl.subs(sub) - K 
+    Kt =  dGl.subs(sub) + K 
 
     return np.array(Kt).astype(np.float64) 
 
