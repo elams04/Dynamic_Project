@@ -73,30 +73,34 @@ sg=sp.Matrix([xa+w/2 -xb,
 sG=sg.jacobian(sq)
 
 # Mass matrix definition
-sM=sp.diag(m1,m2,0,m3,m3,m4,m4,0,0,j2+m2*l2**2/4,j3+m3*l3**2/4,j4+m4*l4**2/4)
-sM[1,9]=-m2*l2*sp.sin(phic)
-sM[10,3]=-m3*l3*sp.sin(phie)
-sM[4,10]=m3*l3*sp.cos(phie)
-sM[5,11]=-m4*l4*sp.sin(phig)
-sM[6,11]=m4*l4*sp.cos(phig)
-
+sM=sp.diag(m1,m2/4,m2/4,(m2+m3)/4,(m2+m3)/4,(m3+m4)/4,(m3+m4)/4,m4/4,m4/4,j2,j3,j4)
+sM[1,3] = (m2)/4
+sM[2,4] = (m2)/4
+sM[3,5] = (m3)/4
+sM[4,6] = (m3)/4
+sM[5,7] = m4/4
+sM[6,8] = m4/4
+sM[3,1] = (m2)/4
+sM[4,2] = (m2)/4
+sM[5,3] = (m3)/4
+sM[6,4] = (m3)/4
+sM[7,5] = m4/4
+sM[8,6] = m4/4
 
 # F_ext vector definition
 sf_ext=sp.Matrix(12,1,[-sp.tanh(10*xa_dot)*mu*np.abs(f_n),
                       0,
-                      -(m1+m2)*gravity,
+                      -(m1+m2/2)*gravity,
                       0,
-                      -m3*gravity,
+                      -(m2+m3)*gravity/2,
                       0,
-                      -m4*gravity,
+                      -(m3+m4)*gravity/2,
                       0,
+                      -m4*gravity/2,
                       0,
-                      -m2*gravity*l2*0.5*sp.cos(phic),
-                      -m3*gravity*l3*0.5*sp.cos(phie),
-                      -m4*gravity*l4*0.5*sp.cos(phig)])
+                      0,               
+                      0])
 
-# f_ext derivative with respect to q
-sf_ext_dq = sf_ext.jacobian(sq)
 
 # f_ext derivative with respect to q_d
 sf_ext_dqdot = sf_ext.jacobian(sq_d)
@@ -129,6 +133,14 @@ par = {
     'gravity': 9.81
 }
 
+# Matrix M definition
+# Substitute the symbols in sM with the values from the par dictionary
+sM_numeric = sM.subs(par)
+
+# Convert the resulting symbolic matrix to a NumPy array for numerical computations
+M = np.array(sM_numeric).astype(np.float64)
+
+
 # Stiffness matrix definition
 K=np.zeros((12,12))
 K[9,9] = par['k1']
@@ -137,8 +149,8 @@ K[11,11] = par['k3']
 
 
 # Define integrator parameters
-h = 0.01
-alpha = 0.015
+h = 0.005
+alpha = 0.02
 gamma = 0.5 + alpha
 beta = 0.25 * (gamma + 1/2)**2
 tolQ = 1e-9
@@ -181,36 +193,6 @@ l[0] = np.zeros((m))
 # =============================================================================
 ## Numerical matrices and residuals evaluation 
 # =============================================================================
-
-def M(q):
-    # Define the numerical values for q
-    q_values = {
-        phic: q[9],   # phic
-        phie: q[10],  # phie
-        phig: q[11],  # phig
-    }
-
-    # Define the parameter values
-    param_values = {
-        m1: par['m1'],
-        m2: par['m2'],
-        m3: par['m3'],
-        m4: par['m4'],
-        l2: par['l2'],
-        l3: par['l3'],
-        l4: par['l4'],
-        j2: par['j2'],
-        j3: par['j3'],
-        j4: par['j4'],
-    }
-
-    # Combine all substitutions
-    sub = {**q_values, **param_values}
-
-    # Evaluate the mass matrix numerically
-    M_numeric = sM.subs(sub)
-
-    return np.array(M_numeric).astype(np.float64) 
 
 def G(q):
     # Define the numerical values for q
@@ -266,18 +248,12 @@ def Kt(q,q_dd,l):
     else:
         dGl = Gl.jacobian(sq)
 
-    # Mass matrix derivative with respect to q
-    Mq = sp.Matrix([sM @ q_dd])
-    if Mq == sp.zeros(Mq.rows, Mq.cols):
-        Mq_d = sp.zeros(n, n)
-    else:
-        Mq_d = Mq.jacobian(sq)
-    
+
     # Combine all substitutions
     sub = {**q_values, **param_values}
 
     # Evaluate the matrix numerically
-    Kt = Mq_d.subs(sub) @ q_dd + dGl.subs(sub) - K - sf_ext_dq.subs(sub)
+    Kt =  dGl.subs(sub) - K 
 
     return np.array(Kt).astype(np.float64) 
 
@@ -341,7 +317,8 @@ def f_ext(q,q_d,l):
 def res(q,q_d, q_dd, l,tt):
 
     # Evaluate the equation of motion residuals
-    r = M(q) @ q_dd + G(q).T @ l - K @ (q-q_0) - f_ext(q,q_d,l).T
+    r = M @ q_dd + G(q).T @ l + K @ (q-q_0) - f_ext(q,q_d,l).T
+
     
     # Evaluate the constraint residuals
     q_values = {
@@ -384,6 +361,11 @@ def res(q,q_d, q_dd, l,tt):
 # =============================================================================
 ## Motion Solver
 # =============================================================================
+plt.figure()
+
+# Initialize lists to store the trace of marker H
+trace_x = []
+trace_y = []
 
 # Time loop
 for i in range(len(tt)-1):
@@ -406,11 +388,11 @@ for i in range(len(tt)-1):
     qt_dd[0] = q_dd[i+1]
     lt[0] = l[i+1] 
 
-    while np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],kscal*lt[j],tt[i])) > tolQ:
+    while np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],lt[j],tt[i])) > tolQ:
 
         # Defining matrix S_t 
-        first_block = 1/(beta*h**2)*M(qt[j]) - gamma/(beta*h)*Ct(qt_d[j]) + Kt(qt[j],qt_dd[j],lt[j])
-        second_block =  kscal*G(qt[j]).T
+        first_block = 1/(beta*h**2)*M - gamma/(beta*h)*Ct(qt_d[j]) + Kt(qt[j],qt_dd[j],lt[j])
+        second_block =  G(qt[j]).T
         top_row = np.hstack((first_block, second_block))  
         bottom_row = np.hstack((second_block.T, np.zeros((m,m))))   
 
@@ -426,18 +408,52 @@ for i in range(len(tt)-1):
         qt[j+1] = qt[j] + Dql[:n].T
         qt_d[j+1] = qt_d[j] + gamma/(beta*h)*Dql[:n].T
         qt_dd[j+1] = qt_dd[j] + 1/(beta*h**2)*Dql[:n].T
-        lt[j+1] = lt[j] + kscal*Dql[n:].T
+        lt[j+1] = lt[j] + Dql[n:].T
 
         print('Iteration:',j," Residual:",np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],lt[j],tt[i])))
         
         if j == maxiter-2:
             print('Differential corrector did not converged')
-            #exit()
-            break
+            exit()
         
         j += 1
 
     print(i)
+
+    # Update the trace of marker H
+    trace_x.append(q[i, 7])  # x-coordinate of marker H
+    trace_y.append(q[i, 8])  # y-coordinate of marker H
+
+
+    # Plot the markers and connect them with lines
+    plt.plot([q[i, 0], q[i, 1]], [0, q[i, 2]], 'r-', label='First Beam')  # Line from first to second marker
+    plt.plot([q[i, 1], q[i, 3]], [q[i, 2], q[i, 4]], 'g-', label='Second Beam')  # Line from second to third marker
+    plt.plot([q[i, 3], q[i, 5]], [q[i, 4], q[i, 6]], 'b-', label='Third Beam')   # Line from third to fourth marker
+    plt.plot([q[i, 5], q[i, 7]], [q[i, 6], q[i, 8]], 'k-', label='Fourth Beam')  # Line from fourth to fifth marker
+
+    # Plot the markers
+    plt.plot(q[i, 0], 0, 'ro', label='A')  # First marker
+    plt.plot(q[i, 1], q[i, 2], 'go', label='B')  # Second marker
+    plt.plot(q[i, 3], q[i, 4], 'bo', label='D')   # Third marker
+    plt.plot(q[i, 5], q[i, 6], 'ko', label='F')  # Fourth marker
+    plt.plot(q[i, 7], q[i, 8], 'mo', label='H')   # Fifth marker
+
+    # Plot the trace of marker H
+    plt.plot(trace_x, trace_y, 'm--', label='Trace of H')  # Dashed magenta line for the trace
+
+
+    # Add labels and legend
+    plt.xlabel('X Position')
+    plt.ylabel('Y Position')
+    plt.title('Double Pendulum Motion')
+    #plt.legend()
+    plt.grid()
+    plt.axis('equal')
+    # Pause and clear for the next iteration
+    plt.pause(h)
+    plt.clf()
+    
+ 
 
     q[i+1] = qt[j]
     q_d[i+1] = qt_d[j]
@@ -449,18 +465,4 @@ for i in range(len(tt)-1):
 ## Plotting
 # =============================================================================
 
-# Plotting the end effectormotion
-x1 = par['length1'] * np.sin(q[:, 2])
-y1 = -par['length1'] * np.cos(q[:, 2])
-x2 = x1 + par['length2'] * np.sin(q[:, 5])
-y2 = y1 - par['length2'] * np.cos(q[:, 5])
 
-plt.figure()
-plt.plot(x1, y1, label='First Beam')
-plt.plot(x2, y2, label='Second Beam')
-plt.xlabel('X Position')
-plt.ylabel('Y Position')
-plt.title('Double Pendulum Motion')
-plt.legend()
-plt.grid()
-plt.show()
