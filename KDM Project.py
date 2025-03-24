@@ -1,9 +1,9 @@
-
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-import matplotlib.animation as animation
+import time
+
 # =============================================================================
 ## Evaluation of the symbolic matrices expressions
 # =============================================================================
@@ -141,13 +141,11 @@ sM_numeric = sM.subs(par)
 # Convert the resulting symbolic matrix to a NumPy array for numerical computations
 M = np.array(sM_numeric).astype(np.float64)
 
-
 # Stiffness matrix definition
 K=np.zeros((12,12))
 K[9,9] = par['k1']
 K[10,10] = par['k2']
 K[11,11] = par['k3']
-
 
 # Define integrator parameters
 h = 0.005
@@ -196,66 +194,32 @@ l[0] = np.zeros((m))
 # =============================================================================
 
 def G(q):
-    # Define the numerical values for q
-    q_values = {
-        phic: q[9],   # phic
-        phie: q[10],  # phie
-        phig: q[11],  # phig 
-    }
-
-    # Define the parameter values
-    param_values = {
-        l2: par['l2'],
-        l3: par['l3'],
-        l4: par['l4'],
-    }
-
-    # Combine all substitutions
-    sub = {**q_values, **param_values}
-
+   
     # Evaluate the G matrix numerically
-    G = sG.subs(sub)
+    G = np.array([
+        [1,-1,0,0,0,0,0,0,0,0,0,0],
+        [0,1,0,-1,0,0,0,0,0,-par['l2']*np.sin(q[9]),0,0],
+        [0,0,1,0,0,0,0,0,0,0,0,0],
+        [0,0,1,0,-1,0,0,0,0,par['l2']*np.cos(q[9]),0,0],
+        [0,0,0,1,0,-1,0,0,0,0,-par['l3']*np.sin(q[10]),0],
+        [0,0,0,0,1,0,-1,0,0,0,par['l3']*np.cos(q[10]),0],
+        [0,0,0,0,0,1,0,-1,0,0,0,-par['l4']*np.sin(q[11])],
+        [0,0,0,0,0,0,1,0,-1,0,0,par['l4']*np.cos(q[11])],
+        [0,0,0,0,0,0,0,-1,0,0,0,0],
+        [0,0,0,0,0,0,0,0,-1,0,0,0]
+    ])
 
-    return np.array(G).astype(np.float64)
+    return G
 
-def Kt(q,q_dd,l):
-    # Define the numerical values for q
-    q_values = {
-        phic: q[9],   
-        phie: q[10],  
-        phig: q[11],  
-    }
-
-    # Define the parameter values
-    param_values = {
-        m1: par['m1'],
-        m2: par['m2'],
-        m3: par['m3'],
-        m4: par['m4'],
-        l2: par['l2'],
-        l3: par['l3'],
-        l4: par['l4'],
-        j2: par['j2'],
-        j3: par['j3'],
-        j4: par['j4'],
-        mu: par['mu'],
-        gravity: par['gravity'],
-    }
-
-    # Derive the Gl matrix
-    Gl = sp.Matrix([sG.T @ l])
-    if Gl ==sp.zeros(Gl.rows, Gl.cols):
-        dGl = sp.zeros(n, n)
-    else:
-        dGl = Gl.jacobian(sq)
-
-
-    # Combine all substitutions
-    sub = {**q_values, **param_values}
+def Kt(q,l):
+    # Evaluate the d(Gl)/dq matrix
+    dGl = np.zeros((12,12))
+    dGl[9,9] = -par['l2']*np.cos(q[9])*l[1]-par['l2']*np.sin(q[9])*l[3]
+    dGl[10,10] = -par['l3']*np.cos(q[10])*l[4]-par['l3']*np.sin(q[10])*l[5]
+    dGl[11,11] = -par['l4']*np.cos(q[11])*l[6]-par['l4']*np.sin(q[11])*l[7]
 
     # Evaluate the matrix numerically
-    Kt =  dGl.subs(sub) + K 
-
+    Kt =  dGl + K 
     return np.array(Kt).astype(np.float64) 
 
 def Ct(q_d):
@@ -283,86 +247,53 @@ def Ct(q_d):
     return np.array(Ct).astype(np.float64)
 
 def f_ext(q,q_d,l):
-    # Define the numerical values for q
-    q_values = {
-        xa_dot: q_d[0],
-        f_n: l[1],
-        phic: q[9],   # phic
-        phie: q[10],  # phie
-        phig: q[11],  # phig
-    }
-
-    # Define the parameter values
-    param_values = {
-        m1: par['m1'],
-        m2: par['m2'],
-        m3: par['m3'],
-        m4: par['m4'],
-        l2: par['l2'],
-        l3: par['l3'],
-        l4: par['l4'],
-        mu: par['mu'],
-        gravity: par['gravity'],
-    }
-
-    # Combine all substitutions
-    sub = {**q_values, **param_values}
-
-    # Evaluate the mass matrix numerically
-    f_ext = sf_ext.subs(sub)
-
-    return np.array(f_ext).astype(np.float64) 
-
+    
+    # Evaluate the f_ext vector numerically
+    f_ext = np.array([
+        -np.tanh(10*q_d[0])*par['mu']*np.abs(l[2]),
+        0,
+        -(par['m1']+par['m2']/2)*par['gravity'],
+        0,
+        -(par['m2']+par['m3'])*par['gravity']/2,
+        0,
+        -(par['m3']+par['m4'])*par['gravity']/2,
+        0,
+        -par['m4']*par['gravity']/2,
+        0,
+        0,
+        0])
+    
+    return f_ext 
 
 # Evaluate residuals
 def res(q,q_d, q_dd, l,tt):
 
     # Evaluate the equation of motion residuals
-    r = M @ q_dd + G(q).T @ l + K @ (q-q_0) - f_ext(q,q_d,l).T
-
+    r = M @ q_dd + G(q).T @ l + K @ (q-q_0) - f_ext(q,q_d,l)
     
+    x_t=0.46+0.1*np.sqrt(2)*np.sin(np.pi*(tt-1))/(1+np.cos(np.pi*(tt-1))**2)
+    y_t=0.47+0.1*np.sqrt(2)*np.sin(np.pi*(tt-1))*np.cos(np.pi*(tt-1))/(1+np.cos(np.pi*(tt-1))**2)
+
     # Evaluate the constraint residuals
-    q_values = {
-        t: tt,
-        xa: q[0],
-        xb: q[1],
-        yb: q[2],
-        xd: q[3],
-        yd: q[4],
-        xf: q[5],
-        yf: q[6],
-        xh: q[7],
-        yh: q[8],
-        phic: q[9],   
-        phie: q[10],  
-        phig: q[11],  
-    }
+    g = np.array([
+        q[0] + par['w']/2 - q[1],
+        q[1] + par['l2']*np.cos(q[9]) - q[3],
+        q[2] - par['hl'],
+        q[2] + par['l2']*np.sin(q[9]) - q[4],
+        q[3] + par['l3']*np.cos(q[10]) - q[5],
+        q[4] + par['l3']*np.sin(q[10]) - q[6],
+        q[5] + par['l4']*np.cos(q[11]) - q[7],
+        q[6] + par['l4']*np.sin(q[11]) - q[8],
+        x_t - q[7] ,
+        y_t - q[8]
+    ])
 
-    param_values = {
-        m1: par['m1'],
-        m2: par['m2'],
-        m3: par['m3'],
-        m4: par['m4'],
-        l2: par['l2'],
-        l3: par['l3'],
-        l4: par['l4'],
-        w: par['w'],
-        hl: par['hl'],
-        mu: par['mu'],
-        gravity: par['gravity'],
-    }
-    
-    sub = {**q_values, **param_values}
-    g = sg.subs(sub)
-    g = np.array(g.T).astype(np.float64)
-
-    resc = np.concatenate([r.T,g.T])
+    resc = np.concatenate([r,g])
     return resc 
 
 # =============================================================================
 ## Motion Solver
 # =============================================================================
-plt.figure()
 
 # Initialize lists to store the trace of marker H
 trace_x = []
@@ -392,14 +323,13 @@ for i in range(len(tt)-1):
     while np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],lt[j],tt[i])) > tolQ:
 
         # Defining matrix S_t 
-        first_block = 1/(beta*h**2)*M - gamma/(beta*h)*Ct(qt_d[j]) + Kt(qt[j],qt_dd[j],lt[j])
+        first_block = 1/(beta*h**2)*M - gamma/(beta*h)*Ct(qt_d[j]) + Kt(qt[j],lt[j])
         second_block =  G(qt[j]).T
         top_row = np.hstack((first_block, second_block))  
         bottom_row = np.hstack((second_block.T, np.zeros((m,m))))   
 
         # Final matrix: concatenate top and bottom rows
         S_t = np.vstack((top_row, bottom_row))  
-        print('s_t cond',np.linalg.cond(S_t))
 
         # Solve the linear system for Dql
         #Dql = np.linalg.solve(S_t, -res(qt[j],qt_d[j],qt_dd[j],lt[j])) 
@@ -411,7 +341,7 @@ for i in range(len(tt)-1):
         qt_dd[j+1] = qt_dd[j] + 1/(beta*h**2)*Dql[:n].T
         lt[j+1] = lt[j] + Dql[n:].T
 
-        print('Iteration:',j," Residual:",np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],lt[j],tt[i])))
+        #print('Iteration:',j," Residual:",np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],lt[j],tt[i])))
         
         if j == maxiter-2:
             print('Differential corrector did not converged')
@@ -419,107 +349,52 @@ for i in range(len(tt)-1):
         
         j += 1
 
-    print(i)
-
-    # # Update the trace of marker H
-    # trace_x.append(q[i, 7])  # x-coordinate of marker H
-    # trace_y.append(q[i, 8])  # y-coordinate of marker H
-
-
-    # # Plot the markers and connect them with lines
-    # plt.plot([q[i, 0], q[i, 1]], [0, q[i, 2]], 'r-', label='First Beam')  # Line from first to second marker
-    # plt.plot([q[i, 1], q[i, 3]], [q[i, 2], q[i, 4]], 'g-', label='Second Beam')  # Line from second to third marker
-    # plt.plot([q[i, 3], q[i, 5]], [q[i, 4], q[i, 6]], 'b-', label='Third Beam')   # Line from third to fourth marker
-    # plt.plot([q[i, 5], q[i, 7]], [q[i, 6], q[i, 8]], 'k-', label='Fourth Beam')  # Line from fourth to fifth marker
-
-    # # Plot the markers
-    # plt.plot(q[i, 0], 0, 'ro', label='A')  # First marker
-    # plt.plot(q[i, 1], q[i, 2], 'go', label='B')  # Second marker
-    # plt.plot(q[i, 3], q[i, 4], 'bo', label='D')   # Third marker
-    # plt.plot(q[i, 5], q[i, 6], 'ko', label='F')  # Fourth marker
-    # plt.plot(q[i, 7], q[i, 8], 'mo', label='H')   # Fifth marker
-
-    # # Plot the trace of marker H
-    # plt.plot(trace_x, trace_y, 'm--', label='Trace of H')  # Dashed magenta line for the trace
-
-
-    # # Add labels and legend
-    # plt.xlabel('X Position')
-    # plt.ylabel('Y Position')
-    # plt.title('Double Pendulum Motion')
-    # #plt.legend()
-    # plt.grid()
-    # plt.axis('equal')
-    # # Pause and clear for the next iteration
-    # plt.pause(h)
-    # plt.clf()
-    
- 
+    # Update the trace of marker H
+    trace_x.append(q[i, 7])  # x-coordinate of marker H
+    trace_y.append(q[i, 8])  # y-coordinate of marker H
 
     q[i+1] = qt[j]
     q_d[i+1] = qt_d[j]
     q_dd[i+1] = qt_dd[j]
     l[i+1] = lt[j]
 
+    print('Completion: ',int(i/(len(tt)-1)*100),'%')
+
+
 
 # =============================================================================
 ## Plotting
 # =============================================================================
 
-xa,xb,yb,xd,yd,xh,yh,xf,yf=q[:,0],q[:,1],q[:,2],q[:,3],q[:,4],q[:,5],q[:,6],q[:,7],q[:,8]
-Max_xa=np.max(xa)
-Max_xf=np.max(xf)
-Min_xa=np.min(xa)
-Min_xf=np.min(xf)
 plt.figure()
-plt.plot(tt,xa,label='$ x_a(t)$')
-plt.axhline(y=Max_xa, color='r', linestyle='--', linewidth=2, label=f'max of $x_a$ ={Max_xa:.2f}')
-plt.axhline(y=Min_xa, color='r', linestyle='--', linewidth=2, label=f'min of $x_a$ ={Min_xa:.2f}')
-plt.grid(True)
-plt.xlabel('time [s] ')
-plt.ylabel('diplasment along x axis [m] ')
-plt.title('Displacment over time')
-plt.legend()
-plt.show()
+for i in range(len(tt)-1):
+    
+    # Plot the markers and connect them with lines
+    plt.plot([q[i, 0], q[i, 1]], [0, q[i, 2]], 'r-', label='First Beam')  # Line from first to second marker
+    plt.plot([q[i, 1], q[i, 3]], [q[i, 2], q[i, 4]], 'g-', label='Second Beam')  # Line from second to third marker
+    plt.plot([q[i, 3], q[i, 5]], [q[i, 4], q[i, 6]], 'b-', label='Third Beam')   # Line from third to fourth marker
+    plt.plot([q[i, 5], q[i, 7]], [q[i, 6], q[i, 8]], 'k-', label='Fourth Beam')  # Line from fourth to fifth marker
 
-plt.figure()
-plt.plot(tt,xf,label='$ x_f(t)$')
-plt.axhline(y=Max_xf, color='b', linestyle='--', linewidth=2, label=f'max of $ x_f $ ={Max_xf:.2f}')
-plt.axhline(y=Min_xf, color='b', linestyle='--', linewidth=2, label=f'min $ x_f $ ={Min_xf:.2f}')
-plt.grid(True)
-plt.xlabel('time [s] ')
-plt.ylabel('diplasment along x axis [m] ')
-plt.title('horizontal diplacment of robot arms (F point) over time')
-plt.legend()
-plt.show()
+    # Plot the markers
+    plt.plot(q[i, 0], 0, 'ro', label='A')  # First marker
+    plt.plot(q[i, 1], q[i, 2], 'go', label='B')  # Second marker
+    plt.plot(q[i, 3], q[i, 4], 'bo', label='D')   # Third marker
+    plt.plot(q[i, 5], q[i, 6], 'ko', label='F')  # Fourth marker
+    plt.plot(q[i, 7], q[i, 8], 'mo', label='H')   # Fifth marker
 
-fig=plt.figure()
-line1,=plt.plot([],[],'r')
-line2,=plt.plot([],[],'r')
-line3,=plt.plot([],[],'r')
-line4,=plt.plot([],[],'r')
-line5,=plt.plot([],[],'b')
-line6,=plt.plot([],[],'g')
-line7,=plt.plot([],[],'r')
-plt.xlabel('x axis in metere')
-plt.ylabel('y axis in meter')
-plt.title('movment of robot')
-plt.xlim(-1,1)
-plt.ylim(0,1)
-plt.grid(True)
-def anime(i):
-    line1.set_data([xa[i],xa[i]],[0,par['hl']])
-    line2.set_data([xa[i],xa[i]+par['w']],[0,0])
-    line3.set_data([xa[i]+par['w'],xa[i]+par['w']],[0,par['hl']])
-    line4.set_data([xa[i],xa[i]+par['w']],[par['hl'],par['hl']])
-    line5.set_data([xb[i],xd[i]],[yb[i],yd[i]])
-    line6.set_data([xd[i],xh[i]],[yd[i],yh[i]])
-    line7.set_data([xh[i],xf[i]],[yh[i],yf[i]])
-    return line1,line2,line3,line4,line5,line5,line6,line7
+    # Plot the trace of marker H
+    plt.plot(trace_x[:i], trace_y[:i], 'm--', label='Trace of H')  # Dashed magenta line for the trace
 
-ani=animation.FuncAnimation(fig,anime,frames=range(0,int((t_f-t_0)/h)),interval=1, blit=False, repeat=False)
 
-# Enregistrement de l'animation
-ani.save("arms robot video.mp4", writer="ffmpeg", fps=60)
-plt.show()
+    # Add labels and legend
+    plt.xlabel('X Position')
+    plt.ylabel('Y Position')
+    plt.title('Double Pendulum Motion')
+    #plt.legend()
+    plt.grid()
+    plt.axis('equal')
+    # Pause and clear for the next iteration
+    plt.pause(0.001)
+    plt.clf()
 
+ 
