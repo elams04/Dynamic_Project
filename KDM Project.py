@@ -1,6 +1,7 @@
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import animation
 import math
 import time
 
@@ -379,40 +380,63 @@ print('Total required space: ',np.max(q[:,7])-np.min(q[:,0]),'[m]')
 ## Plotting
 # =============================================================================
 
-# Animation -------------------------------------------------------------------
-plt.figure(1)
-for i in range(len(tt)-1):
-    # Plot the markers and connect them with lines
-    plt.plot([q[i, 1], q[i, 3]], [q[i, 2], q[i, 4]], 'g-', label='First Beam')  
-    plt.plot([q[i, 3], q[i, 5]], [q[i, 4], q[i, 6]], 'b-', label='Second Beam')   
-    plt.plot([q[i, 5], q[i, 7]], [q[i, 6], q[i, 8]], 'k-', label='Third Beam')  
 
-    # Plot the markers
-    plt.plot(q[i, 0], 0, 'ro', label='A')  
-    plt.plot(q[i, 1], q[i, 2], 'go', label='B')  
-    plt.plot(q[i, 3], q[i, 4], 'bo', label='D')   
-    plt.plot(q[i, 5], q[i, 6], 'ko', label='F')  
-    plt.plot(q[i, 7], q[i, 8], 'mo', label='H')   
+xa,xb,yb,xd,yd,xh,yh,xf,yf=q[:,0],q[:,1],q[:,2],q[:,3],q[:,4],q[:,5],q[:,6],q[:,7],q[:,8]
+Max_xa=np.max(xa)
+Max_xf=np.max(xf)
+Min_xa=np.min(xa)
+Min_xf=np.min(xf)
+plt.figure()
+plt.plot(tt,xa,label='$ x_a(t)$')
+plt.axhline(y=Max_xa, color='r', linestyle='--', linewidth=2, label=f'max of $x_a$ ={Max_xa:.2f}')
+plt.axhline(y=Min_xa, color='r', linestyle='--', linewidth=2, label=f'min of $x_a$ ={Min_xa:.2f}')
+plt.grid(True)
+plt.xlabel('time [s] ')
+plt.ylabel('diplasment along x axis [m] ')
+plt.title('Displacment over time')
+plt.legend()
+plt.show()
 
-    # Plot the trace of marker H
-    plt.plot(trace_x[:i], trace_y[:i], 'm--', label='Trace of H')  
+plt.figure()
+plt.plot(tt,xf,label='$ x_f(t)$')
+plt.axhline(y=Max_xf, color='b', linestyle='--', linewidth=2, label=f'max of $ x_f $ ={Max_xf:.2f}')
+plt.axhline(y=Min_xf, color='b', linestyle='--', linewidth=2, label=f'min $ x_f $ ={Min_xf:.2f}')
+plt.grid(True)
+plt.xlabel('time [s] ')
+plt.ylabel('diplasment along x axis [m] ')
+plt.title('horizontal diplacment of robot arms (F point) over time')
+plt.legend()
+plt.show()
 
-    # Draw the base of the robot as a rectangle
-    width = 2*(q[i, 1] - q[i, 0])  
-    height = par['hl']      
-    rect = plt.Rectangle((q[i, 0], 0), width, height, color='gray', alpha=0.5, label='Robot Base')
-    plt.gca().add_patch(rect)  
+fig=plt.figure()
+line1,=plt.plot([],[],'r')
+line2,=plt.plot([],[],'r')
+line3,=plt.plot([],[],'r')
+line4,=plt.plot([],[],'r')
+line5,=plt.plot([],[],'b')
+line6,=plt.plot([],[],'g')
+line7,=plt.plot([],[],'r')
+plt.xlabel('x axis in metere')
+plt.ylabel('y axis in meter')
+plt.title('movment of robot')
+plt.xlim(-1,1)
+plt.ylim(0,1)
+plt.grid(True)
+def anime(i):
+    line1.set_data([xa[i],xa[i]],[0,par['hl']])
+    line2.set_data([xa[i],xa[i]+par['w']],[0,0])
+    line3.set_data([xa[i]+par['w'],xa[i]+par['w']],[0,par['hl']])
+    line4.set_data([xa[i],xa[i]+par['w']],[par['hl'],par['hl']])
+    line5.set_data([xb[i],xd[i]],[yb[i],yd[i]])
+    line6.set_data([xd[i],xh[i]],[yd[i],yh[i]])
+    line7.set_data([xh[i],xf[i]],[yh[i],yf[i]])
+    return line1,line2,line3,line4,line5,line5,line6,line7
 
-    # Add labels and legend
-    plt.xlabel('X Position')
-    plt.ylabel('Y Position')
-    plt.legend()
-    plt.grid()
-    plt.axis('equal')
-    plt.pause(h)
-    if i != len(tt) - 2:
-        plt.clf()
+ani=animation.FuncAnimation(fig,anime,frames=range(0,int((t_f-t_0)/h)),interval=1, blit=False, repeat=False)
 
+# Enregistrement de l'animation
+ani.save("arms robot video.mp4", writer="ffmpeg", fps=60)
+plt.show()
 
 # Base position, velocity and acceleration ------------------------------------
 # Create a figure with 3 subplots 
