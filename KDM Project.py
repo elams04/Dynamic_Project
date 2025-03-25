@@ -28,12 +28,6 @@ phic=sp.Function('phi_c')(t)
 phie=sp.Function('phi_e')(t)
 phig=sp.Function('phi_g')(t)
 
-# #Coordinate's symbols
-# Xa,Xb,Xd,Yd,Xf,Yf,Xh,Yh,PHIc,PHIe,PHIg=sp.symbols('x_a x_b x_d y_d x_f y_f x_h y_h phi_c phi_e phi_g')
-# xad, xbd, xdd, ydd, xfd, yfd, xhd, yhd, phicd, phied, phigd = sp.symbols(
-#    r'\dot{x_a}, \dot{x_b}, \dot{x_d}, \dot{y_d}, \dot{x_f}, \dot{y_f}, \dot{x_h}, \dot{y_h}, \dot{\phi_c}, \dot{\phi_e}, \dot{\phi_g}'
-# )
-
 #Imposed displacement 
 x_t=0.46+0.1*sp.sqrt(2)*sp.sin(sp.pi*(t-1))/(1+sp.cos(sp.pi*(t-1))**2)
 y_t=0.47+0.1*sp.sqrt(2)*sp.sin(sp.pi*(t-1))*sp.cos(sp.pi*(t-1))/(1+sp.cos(sp.pi*(t-1))**2)
@@ -114,7 +108,7 @@ n = 12 # Number of generalized coordinates
 m = 10 # Number of constraints
 
 # Define problem parameters
-par = {
+par = { # Original parameters
     'm1': 5.6,
     'm2': 5.2,
     'm3': 4.4,
@@ -128,6 +122,26 @@ par = {
     'hl': 0.283,
     'w': 0.129,
     'k1': 100,
+    'k2': 10,
+    'k3': 10,
+    'mu': 0.01,
+    'gravity': 9.81
+}
+
+par1 = { # Modified parameters
+    'm1': 10.6,
+    'm2': 5.2,
+    'm3': 4.4,
+    'm4': 0.8,
+    'l2': 0.629,
+    'l3': 0.444,
+    'l4': 0.22,
+    'j2': 0.1714,
+    'j3': 0.07228,
+    'j4': 0.00322667,
+    'hl': 0.283,
+    'w': 0.129,
+    'k1': 50,
     'k2': 10,
     'k3': 10,
     'mu': 0.01,
@@ -149,11 +163,10 @@ K[11,11] = par['k3']
 
 # Define integrator parameters
 h = 0.005
-alpha = 0.02
+alpha = 0.3
 gamma = 0.5 + alpha
 beta = 0.25 * (gamma + 1/2)**2
 tolQ = 1e-9
-kscal = 10000
 maxiter = 502
 
 t_0 = 0
@@ -318,7 +331,7 @@ for i in range(len(tt)-1):
     qt[0] = q[i+1]
     qt_d[0] = q_d[i+1]
     qt_dd[0] = q_dd[i+1]
-    lt[0] = l[i+1] 
+    lt[0] = l[i+1]
 
     while np.linalg.norm(res(qt[j],qt_d[j],qt_dd[j],lt[j],tt[i])) > tolQ:
 
@@ -360,41 +373,87 @@ for i in range(len(tt)-1):
 
     print('Completion: ',int(i/(len(tt)-1)*100),'%')
 
-
+print('Total required space: ',np.max(q[:,7])-np.min(q[:,0]),'[m]')
 
 # =============================================================================
 ## Plotting
 # =============================================================================
 
-plt.figure()
+# Animation -------------------------------------------------------------------
+plt.figure(1)
 for i in range(len(tt)-1):
-    
     # Plot the markers and connect them with lines
-    plt.plot([q[i, 0], q[i, 1]], [0, q[i, 2]], 'r-', label='First Beam')  # Line from first to second marker
-    plt.plot([q[i, 1], q[i, 3]], [q[i, 2], q[i, 4]], 'g-', label='Second Beam')  # Line from second to third marker
-    plt.plot([q[i, 3], q[i, 5]], [q[i, 4], q[i, 6]], 'b-', label='Third Beam')   # Line from third to fourth marker
-    plt.plot([q[i, 5], q[i, 7]], [q[i, 6], q[i, 8]], 'k-', label='Fourth Beam')  # Line from fourth to fifth marker
+    plt.plot([q[i, 1], q[i, 3]], [q[i, 2], q[i, 4]], 'g-', label='First Beam')  
+    plt.plot([q[i, 3], q[i, 5]], [q[i, 4], q[i, 6]], 'b-', label='Second Beam')   
+    plt.plot([q[i, 5], q[i, 7]], [q[i, 6], q[i, 8]], 'k-', label='Third Beam')  
 
     # Plot the markers
-    plt.plot(q[i, 0], 0, 'ro', label='A')  # First marker
-    plt.plot(q[i, 1], q[i, 2], 'go', label='B')  # Second marker
-    plt.plot(q[i, 3], q[i, 4], 'bo', label='D')   # Third marker
-    plt.plot(q[i, 5], q[i, 6], 'ko', label='F')  # Fourth marker
-    plt.plot(q[i, 7], q[i, 8], 'mo', label='H')   # Fifth marker
+    plt.plot(q[i, 0], 0, 'ro', label='A')  
+    plt.plot(q[i, 1], q[i, 2], 'go', label='B')  
+    plt.plot(q[i, 3], q[i, 4], 'bo', label='D')   
+    plt.plot(q[i, 5], q[i, 6], 'ko', label='F')  
+    plt.plot(q[i, 7], q[i, 8], 'mo', label='H')   
 
     # Plot the trace of marker H
-    plt.plot(trace_x[:i], trace_y[:i], 'm--', label='Trace of H')  # Dashed magenta line for the trace
+    plt.plot(trace_x[:i], trace_y[:i], 'm--', label='Trace of H')  
 
+    # Draw the base of the robot as a rectangle
+    width = 2*(q[i, 1] - q[i, 0])  
+    height = par['hl']      
+    rect = plt.Rectangle((q[i, 0], 0), width, height, color='gray', alpha=0.5, label='Robot Base')
+    plt.gca().add_patch(rect)  
 
     # Add labels and legend
     plt.xlabel('X Position')
     plt.ylabel('Y Position')
-    plt.title('Double Pendulum Motion')
-    #plt.legend()
+    plt.legend()
     plt.grid()
     plt.axis('equal')
-    # Pause and clear for the next iteration
-    plt.pause(0.001)
-    plt.clf()
+    plt.pause(h)
+    if i != len(tt) - 2:
+        plt.clf()
 
- 
+
+# Base position, velocity and acceleration ------------------------------------
+# Create a figure with 3 subplots 
+fig, axs = plt.subplots(3, 1, figsize=(8, 12))  
+
+# Plot base position
+axs[0].plot(tt, q[:, 0], label=r'Base position: $x_A$')
+axs[0].set_xlabel('Time [s]')
+axs[0].set_ylabel('Position on x [m]')
+axs[0].legend()
+axs[0].grid()
+
+# Plot base velocity
+axs[1].plot(tt, q_d[:, 0], label=r'Base velocity: $\dot{x}_A$')
+axs[1].set_xlabel('Time [s]')
+axs[1].set_ylabel('Velocity on x [m/s]')
+axs[1].legend()
+axs[1].grid()
+
+# Plot base acceleration
+axs[2].plot(tt, q_dd[:, 0], label=r'Base acceleration: $\ddot{x}_A$')
+axs[2].set_xlabel('Time [s]')
+axs[2].set_ylabel('Acceleration on x [m/$s^2$]')
+axs[2].legend()
+axs[2].grid()
+
+fig.subplots_adjust(hspace=0.1)  
+
+plt.show(block=False)
+
+# Base displacement -----------------------------------------------------------
+plt.figure()
+plt.plot(tt, q[:, 0], label=r'Base position: $x_A$')
+plt.plot(tt, q[:, 7], label=r'EF position: $x_H$')
+plt.axhline(y=np.min(q[:,0]), color='r', linestyle='--', label=f'Min $x_A$ = {np.min(q[:,0]):.2f}m')
+plt.axhline(y=np.max(q[:,7]), color='r', linestyle='--', label=f'Max $x_H$ = {np.max(q[:,7]):.2f}m')
+plt.xlabel('Time [s]')
+plt.ylabel('Position on x [m]')
+plt.legend()
+plt.grid()
+plt.show()
+
+
+
