@@ -380,33 +380,11 @@ print('Total required space: ',np.max(q[:,7])-np.min(q[:,0]),'[m]')
 ## Plotting
 # =============================================================================
 
-
 xa,xb,yb,xd,yd,xh,yh,xf,yf=q[:,0],q[:,1],q[:,2],q[:,3],q[:,4],q[:,5],q[:,6],q[:,7],q[:,8]
 Max_xa=np.max(xa)
 Max_xf=np.max(xf)
 Min_xa=np.min(xa)
 Min_xf=np.min(xf)
-plt.figure()
-plt.plot(tt,xa,label='$ x_a(t)$')
-plt.axhline(y=Max_xa, color='r', linestyle='--', linewidth=2, label=f'max of $x_a$ ={Max_xa:.2f}')
-plt.axhline(y=Min_xa, color='r', linestyle='--', linewidth=2, label=f'min of $x_a$ ={Min_xa:.2f}')
-plt.grid(True)
-plt.xlabel('time [s] ')
-plt.ylabel('diplasment along x axis [m] ')
-plt.title('Displacment over time')
-plt.legend()
-plt.show()
-
-plt.figure()
-plt.plot(tt,xf,label='$ x_f(t)$')
-plt.axhline(y=Max_xf, color='b', linestyle='--', linewidth=2, label=f'max of $ x_f $ ={Max_xf:.2f}')
-plt.axhline(y=Min_xf, color='b', linestyle='--', linewidth=2, label=f'min $ x_f $ ={Min_xf:.2f}')
-plt.grid(True)
-plt.xlabel('time [s] ')
-plt.ylabel('diplasment along x axis [m] ')
-plt.title('horizontal diplacment of robot arms (F point) over time')
-plt.legend()
-plt.show()
 
 fig=plt.figure()
 line1,=plt.plot([],[],'r')
@@ -437,6 +415,37 @@ ani=animation.FuncAnimation(fig,anime,frames=range(0,int((t_f-t_0)/h)),interval=
 # Enregistrement de l'animation
 ani.save("arms robot video.mp4", writer="ffmpeg", fps=60)
 plt.show()
+
+
+# Robot at t_end --------------------------------------------------------------
+# Plot the markers and connect them with lines
+plt.plot([q[-1, 1], q[-1, 3]], [q[-1, 2], q[-1, 4]], 'g-', label='First Beam')  
+plt.plot([q[-1, 3], q[-1, 5]], [q[-1, 4], q[-1, 6]], 'b-', label='Second Beam')   
+plt.plot([q[-1, 5], q[-1, 7]], [q[-1, 6], q[-1, 8]], 'k-', label='Third Beam')  
+
+# Plot the markers
+plt.plot(q[-1, 0], 0, 'ro', label='A')  
+plt.plot(q[-1, 1], q[-1, 2], 'go', label='B')  
+plt.plot(q[-1, 3], q[-1, 4], 'bo', label='D')   
+plt.plot(q[-1, 5], q[-1, 6], 'ko', label='F')  
+plt.plot(q[-1, 7], q[-1, 8], 'mo', label='H')   
+
+# Plot the trace of marker H
+plt.plot(trace_x[:], trace_y[:], 'm--', label='Trace of H')  
+
+# Draw the base of the robot as a rectangle
+width = 2*(q[-1, 1] - q[-1, 0])  
+height = par['hl']      
+rect = plt.Rectangle((q[-1, 0], 0), width, height, color='gray', alpha=0.5, label='Robot Base')
+plt.gca().add_patch(rect)  
+
+# Add labels and legend
+plt.xlabel('X Position')
+plt.ylabel('Y Position')
+plt.legend()
+plt.grid()
+plt.axis('equal')
+
 
 # Base position, velocity and acceleration ------------------------------------
 # Create a figure with 3 subplots 
@@ -477,7 +486,27 @@ plt.xlabel('Time [s]')
 plt.ylabel('Position on x [m]')
 plt.legend()
 plt.grid()
+plt.show(block=False)
+
+
+plt.figure()
+plt.plot(tt,xa,label='$ x_a(t)$')
+plt.axhline(y=Max_xa, color='r', linestyle='--', linewidth=2, label=f'max of $x_a$ ={Max_xa:.2f}')
+plt.axhline(y=Min_xa, color='r', linestyle='--', linewidth=2, label=f'min of $x_a$ ={Min_xa:.2f}')
+plt.grid(True)
+plt.xlabel('time [s] ')
+plt.ylabel('diplasment along x axis [m] ')
+plt.title('Displacment over time')
+plt.legend()
+plt.show(block=False)
+
+plt.figure()
+plt.plot(tt,xf,label='$ x_f(t)$')
+plt.axhline(y=Max_xf, color='b', linestyle='--', linewidth=2, label=f'max of $ x_f $ ={Max_xf:.2f}')
+plt.axhline(y=Min_xf, color='b', linestyle='--', linewidth=2, label=f'min $ x_f $ ={Min_xf:.2f}')
+plt.grid(True)
+plt.xlabel('time [s] ')
+plt.ylabel('diplasment along x axis [m] ')
+plt.title('horizontal diplacment of robot arms (F point) over time')
+plt.legend()
 plt.show()
-
-
-
